@@ -8,7 +8,8 @@ on:
   workflow_call:
 
 permissions:
-  contents: read
+  # write: publish the bundle as a GitHub Release on push to master.
+  contents: write
 
 jobs:
   build-windows:
@@ -75,3 +76,24 @@ jobs:
           name: ${{ steps.bundle.outputs.name }}
           path: distrib/openglad-*-windows.zip
           if-no-files-found: error
+
+      # --- Release (master merges only) ---------------------------------------
+      # On a push to master, publish the bundle as a GitHub Release. The tag is
+      # the same `git describe` string the packaging script uses, so this and the
+      # Linux-bundle job attach their archives to one shared release per commit.
+      # PR builds skip this and only upload the workflow artifact above.
+      - name: Determine release tag
+        if: github.event_name == 'push'
+        id: relver
+        run: echo "tag=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.relver.outputs.tag }}
+          name: OpenGlad ${{ steps.relver.outputs.tag }}
+          # Automated per-commit build from master, not a curated release.
+          prerelease: true
+          files: distrib/openglad-*-windows.zip
+          fail_on_unmatched_files: true
